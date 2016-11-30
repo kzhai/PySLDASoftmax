@@ -228,7 +228,7 @@ def main():
         sys.stderr.write("error: unrecognized inference mode %d...\n" % (inference_mode));
         return;
     
-    slda_inferencer._initialize(train_docs[:10], vocab, labels, number_of_topics, alpha_alpha, alpha_beta, eta_l2_lambda);
+    slda_inferencer._initialize(train_docs, vocab, labels, number_of_topics, alpha_alpha, alpha_beta, eta_l2_lambda);
     
     for iteration in xrange(training_iterations):
         slda_inferencer.learning();
