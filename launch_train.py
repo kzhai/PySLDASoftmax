@@ -22,7 +22,8 @@ def parse_args():
                         # parameter set 3
                         alpha_alpha=-1,
                         alpha_beta=-1,
-                        alpha_eta=0,
+                        alpha_eta=-1,
+                        eta_l2_lambda=1.0,
                         #alpha_sigma=1.0,
                         
                         # parameter set 4
@@ -53,7 +54,9 @@ def parse_args():
     parser.add_option("--alpha_beta", type="float", dest="alpha_beta",
                       help="hyper-parameter for Dirichlet distribution of vocabulary [1.0/number_of_types]")
     parser.add_option("--alpha_eta", type="float", dest="alpha_eta",
-                      help="hyper-parameter for Gaussian response [0]")
+                      help="hyper-parameter for Gaussian response [1.0/number_of_labels]")
+    parser.add_option("--eta_l2_lambda", type="float", dest="l2_lambda",
+                      help="l2 regularizer coefficient for eta [1.0]")
     #parser.add_option("--alpha_sigma", type="float", dest="alpha_sigma",
                       #help="hyper-parameter for Gaussian response [1.0]")
     
@@ -137,8 +140,14 @@ def main():
     alpha_beta = options.alpha_beta;
     if alpha_beta <= 0:
         alpha_beta = 1.0 / len(vocab);
-        
-    alpha_eta = options.alpha_eta;
+
+    #alpha_eta = 1.0 / len(labels);
+    #if options.alpha_eta > 0:
+        #alpha_eta = options.alpha_eta;
+
+    eta_l2_lambda = options.eta_l2_lambda;
+    assert eta_l2_lambda >= 0;
+
     #alpha_sigma = options.alpha_sigma;
     #assert alpha_sigma > 0
     
@@ -151,7 +160,8 @@ def main():
     suffix += "-K%d" % (number_of_topics);
     suffix += "-aa%f" % (alpha_alpha);
     suffix += "-ab%f" % (alpha_beta);
-    suffix += "-ae%f" % (alpha_eta);
+    #suffix += "-ae%f" % (alpha_eta);
+    #suffix += "-l2l%f" % (eta_l2_lambda);
     #suffix += "-as%f" % (alpha_sigma);
     suffix += "-im%d" % (inference_mode);
     # suffix += "-%s" % (resample_topics);
@@ -174,7 +184,8 @@ def main():
     # parameter set 3
     options_output_file.write("alpha_alpha=" + str(alpha_alpha) + "\n");
     options_output_file.write("alpha_beta=" + str(alpha_beta) + "\n");
-    options_output_file.write("alpha_eta=" + str(alpha_eta) + "\n");
+    #options_output_file.write("alpha_eta=" + str(alpha_eta) + "\n");
+    options_output_file.write("eta_l2_lambda=" + str(eta_l2_lambda) + "\n");
     #options_output_file.write("alpha_sigma=" + str(alpha_sigma) + "\n");
     # parameter set 4
     options_output_file.write("inference_mode=%d\n" % (inference_mode));
@@ -193,7 +204,8 @@ def main():
     # parameter set 3
     print "alpha_alpha=" + str(alpha_alpha)
     print "alpha_beta=" + str(alpha_beta)
-    print "alpha_eta=" + str(alpha_eta)
+    #print "alpha_eta=" + str(alpha_eta)
+    print "eta_l2_lambda=" + str(eta_l2_lambda)
     #print "alpha_sigma=" + str(alpha_sigma)
     # parameter set 4
     print "inference_mode=%d" % (inference_mode)
@@ -203,12 +215,12 @@ def main():
         # import hybrid
         # slda_inferencer = hybrid.Hybrid();
         raise NotImplementedError
-        return 
+        return
     elif inference_mode == 1:
         # import monte_carlo
         # slda_inferencer = monte_carlo.MonteCarlo();
         raise NotImplementedError
-        return 
+        return
     elif inference_mode == 2:
         import variational_bayes
         slda_inferencer = variational_bayes.VariationalBayes();
@@ -216,11 +228,11 @@ def main():
         sys.stderr.write("error: unrecognized inference mode %d...\n" % (inference_mode));
         return;
     
-    slda_inferencer._initialize(train_docs[:20], vocab, labels, number_of_topics, alpha_alpha, alpha_beta, alpha_eta);
+    slda_inferencer._initialize(train_docs[:10], vocab, labels, number_of_topics, alpha_alpha, alpha_beta, eta_l2_lambda);
     
     for iteration in xrange(training_iterations):
         slda_inferencer.learning();
-        
+
         if (slda_inferencer._counter % snapshot_interval == 0):
             # slda_inferencer.export_beta(output_directory + 'exp_beta-' + str(slda_inferencer._counter));
             slda_inferencer.export_eta(output_directory + 'exp_eta-' + str(slda_inferencer._counter));

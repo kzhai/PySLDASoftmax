@@ -26,7 +26,9 @@ class VariationalBayes(Inferencer):
                  hyper_parameter_optimize_interval=1,
                  symmetric_alpha_alpha=True,
                  symmetric_alpha_beta=True,
-                 scipy_optimization_method="CG"
+                 #scipy_optimization_method="BFGS",
+                 scipy_optimization_method="L-BFGS-B",
+                 #scipy_optimization_method = "CG"
                  ):
         Inferencer.__init__(self, hyper_parameter_optimize_interval);
 
@@ -47,7 +49,8 @@ class VariationalBayes(Inferencer):
                     number_of_topics,
                     alpha_alpha,
                     alpha_beta,
-                    alpha_eta=0,
+                    #alpha_eta=1,
+                    eta_l2_lambda=1.0,
                     # alpha_sigma_square=1.0
                     ):
         Inferencer._initialize(self, vocab, labels, number_of_topics, alpha_alpha, alpha_beta);
@@ -66,7 +69,11 @@ class VariationalBayes(Inferencer):
         # self._beta /= numpy.sum(self._beta, 1)[:, numpy.newaxis]
         # self._E_log_eta = compute_dirichlet_expectation(self._beta);
         
-        self._eta = numpy.zeros((self._number_of_labels, self._number_of_topics)) + alpha_eta
+        #self._eta = numpy.zeros((self._number_of_labels, self._number_of_topics)) + alpha_eta
+        self._eta = numpy.random.random((self._number_of_labels, self._number_of_topics));
+        self._eta /= numpy.sqrt(numpy.sum(self._eta**2));
+
+        self._eta_l2_lambda = eta_l2_lambda
         # self._sigma_square = alpha_sigma_square
         
     def e_step(self,
@@ -278,56 +285,79 @@ class VariationalBayes(Inferencer):
         return optimize_result.x
 
     def f_eta(self, eta_vector, *args):
-        assert eta_vector.shape == (self._number_of_labels * self._number_of_topics,)
-        eta = numpy.reshape(eta_vector, (self._number_of_labels, self._number_of_topics))
-        
         (E_A_sufficient_statistics, E_AA_sufficient_statistics) = args;
-        
+
+        assert eta_vector.shape == (self._number_of_labels * self._number_of_topics,)
+        l2_regularizer = numpy.sum(eta_vector ** 2) * self._eta_l2_lambda;
+        eta = numpy.reshape(eta_vector, (self._number_of_labels, self._number_of_topics))
+
         likelihood = 0;
         for doc_id in xrange(len(self._parsed_labels)):
             label_ids = self._parsed_labels[doc_id]
-            
-            likelihood += numpy.dot(eta[label_ids, :], E_A_sufficient_statistics[doc_id, :])
-            
+
+            likelihood += numpy.sum(numpy.dot(eta[label_ids, :], E_A_sufficient_statistics[[doc_id], :].T))
+
             a1 = numpy.dot(eta, E_A_sufficient_statistics[doc_id, :][:, numpy.newaxis]);
             assert a1.shape == (self._number_of_labels, 1)
-            a2 = numpy.diag(numpy.dot(numpy.dot(eta, E_AA_sufficient_statistics[doc_id, :, :]), eta.T))[:, numpy.newaxis]
+            a2 = numpy.zeros((self._number_of_labels, 1));
+            for label_id in xrange(self._number_of_labels):
+                a2[label_id, 0] = numpy.dot(numpy.dot(eta[[label_id], :], E_AA_sufficient_statistics[doc_id, :, :]), eta[[label_id], :].T) * 0.5 + 1.0
+            #a2 = numpy.diag(numpy.dot(numpy.dot(eta, E_AA_sufficient_statistics[doc_id, :, :]), eta.T))[:, numpy.newaxis] * 0.5 + 1.0
             assert a2.shape == (self._number_of_labels, 1)
-            
+
             likelihood -= scipy.misc.logsumexp(a1 + numpy.log(a2));
-            
-        return -likelihood;
+
+        return -likelihood + l2_regularizer;
       
     def f_prime_eta(self, eta_vector, *args):
-        assert eta_vector.shape == (self._number_of_labels * self._number_of_topics,)
-        eta = numpy.reshape(eta_vector, (self._number_of_labels, self._number_of_topics))
-        
         (E_A_sufficient_statistics, E_AA_sufficient_statistics) = args;
-    
-        derivative = numpy.tile(numpy.sum(E_A_sufficient_statistics, axis=0), (self._number_of_labels, 1));
+
+        assert eta_vector.shape == (self._number_of_labels * self._number_of_topics,)
+        l2_regularizer = 2 * self._eta_l2_lambda * eta_vector;
+        eta = numpy.reshape(eta_vector, (self._number_of_labels, self._number_of_topics))
+
+        derivative = numpy.zeros((self._number_of_labels, self._number_of_topics))
         assert derivative.shape == (self._number_of_labels, self._number_of_topics)
-        eta_aux = numpy.zeros(self._number_of_topics);
+
+
         for doc_id in xrange(len(self._parsed_labels)):
             label_ids = self._parsed_labels[doc_id]
-            
+
+            for label_id in label_ids:
+                derivative[label_id, :] += E_A_sufficient_statistics[doc_id, :];
+                # derivative += numpy.dot(eta[label_ids, :], E_A_sufficient_statistics[doc_id, :][numpy.newaxis, :])
+
+            #numpy.tile(numpy.sum(E_A_sufficient_statistics, axis=0), (self._number_of_labels, 1));
+
             a1 = numpy.dot(eta, E_A_sufficient_statistics[doc_id, :][:, numpy.newaxis]);
             assert a1.shape == (self._number_of_labels, 1), a1.shape
-            a2 = numpy.diag(numpy.dot(numpy.dot(eta, E_AA_sufficient_statistics[doc_id, :, :]), eta.T))[:, numpy.newaxis]
-            assert a2.shape == (self._number_of_labels, 1), a2.shape
-            
-            t_value = scipy.misc.logsumexp(a1 + numpy.log(a2));
-            
+            a2 = numpy.zeros((self._number_of_labels, 1));
             for label_id in xrange(self._number_of_labels):
-                eta_aux += numpy.dot(E_AA_sufficient_statistics[doc_id, :, :], eta[label_id, :])
-                # derivative += numpy.dot(eta[label_ids, :], E_A_sufficient_statistics[doc_id, :][numpy.newaxis, :])
-                
-            derivative_temp = numpy.exp(a1) * (numpy.dot(a2, E_A_sufficient_statistics[doc_id, :][numpy.newaxis, :]) + eta_aux[numpy.newaxis, :]);
+                a2[label_id, 0] = numpy.dot(numpy.dot(eta[[label_id], :], E_AA_sufficient_statistics[doc_id, :, :]), eta[[label_id], :].T) * 0.5 + 1.0
+            #a2 = numpy.diag(numpy.dot(numpy.dot(eta, E_AA_sufficient_statistics[doc_id, :, :]), eta.T))[:, numpy.newaxis] * 0.5 + 1.0
+            assert a2.shape == (self._number_of_labels, 1), a2.shape
+
+            t_value = scipy.misc.logsumexp(a1 + numpy.log(a2));
+
+            eta_aux = numpy.dot(eta, E_AA_sufficient_statistics[doc_id, :, :])
+            assert eta_aux.shape==(self._number_of_labels, self._number_of_topics);
+
+            #eta_aux = numpy.zeros((self._number_of_labels, self._number_of_topics));
+            #for label_id in xrange(self._number_of_labels):
+                # eta_aux += numpy.dot(E_AA_sufficient_statistics[doc_id, :, :], eta[label_id, :])
+                #eta_aux[label_id, :] = numpy.dot(eta[[label_id], :], E_AA_sufficient_statistics[doc_id, :, :])[0, :]
+
+            derivative_temp = numpy.zeros((self._number_of_labels, self._number_of_topics));
+            for label_id in xrange(self._number_of_labels):
+                derivative_temp[label_id, :] += -numpy.exp(a1[label_id, 0]) * (a2[label_id, 0] * E_A_sufficient_statistics[doc_id, :] + eta_aux[label_id, :]);
+            #derivative_temp = numpy.exp(a1) * (numpy.dot(a2, E_A_sufficient_statistics[doc_id, :][numpy.newaxis, :]) + eta_aux[numpy.newaxis, :]);
             assert derivative_temp.shape == (self._number_of_labels, self._number_of_topics);
             derivative_temp *= numpy.exp(-t_value)
-            
+
             derivative += derivative_temp
-            
-        return -derivative;
+
+        derivative = numpy.reshape(derivative, (self._number_of_labels * self._number_of_topics,));
+        return -derivative + l2_regularizer;
     
     def m_step(self, phi_sufficient_statistics, E_A_sufficient_statistics, E_AA_sufficient_statistics):
         assert phi_sufficient_statistics.shape == (self._number_of_topics, self._number_of_types);
