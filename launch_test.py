@@ -92,7 +92,20 @@ def evaluate_snapshot(input_snapshot_path, test_docs, output_gamma_path):
     slda_inferencer = cPickle.load(open(input_snapshot_path, "rb" ));
     #print 'successfully load model snapshot %s...' % (os.path.abspath(input_snapshot_path));
     
-    log_likelihood, gamma_values = slda_inferencer.inference(test_docs);
+    log_likelihood, gamma_values, predicted_responses, parsed_labels = slda_inferencer.inference(test_docs);
+
+    predicted_labels = numpy.argmax(predicted_responses, axis=1)
+    assert predicted_labels.shape == (len(parsed_labels),);
+
+    confusion_matrix = numpy.zeros((slda_inferencer._number_of_labels, slda_inferencer._number_of_labels));
+    for doc_id in xrange(len(parsed_labels)):
+        ground_truth = parsed_labels[doc_id][0];
+        prediction = predicted_labels[doc_id];
+        confusion_matrix[ground_truth, prediction] += 1;
+
+    # mean_absolute_error = numpy.abs(predicted_responses - parsed_labels[:, numpy.newaxis]).sum()
+    print confusion_matrix
+
     print "held-out likelihood of snapshot %s is %g" % (os.path.abspath(input_snapshot_path), log_likelihood);
     numpy.savetxt(output_gamma_path, gamma_values);
 

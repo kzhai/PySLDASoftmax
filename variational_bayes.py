@@ -87,8 +87,9 @@ class VariationalBayes(Inferencer):
             word_idss = self._parsed_corpus;
             label_idss = self._parsed_labels
         else:
-            word_idss, label_idss = parsed_corpus_labels;
-        
+            word_idss = parsed_corpus_labels;
+            label_idss = None;
+
         number_of_documents = len(word_idss);
         
         document_log_likelihood = 0;
@@ -110,7 +111,8 @@ class VariationalBayes(Inferencer):
         for doc_id in xrange(number_of_documents):
             total_word_count = len(word_idss[doc_id]);
             term_ids = word_idss[doc_id];
-            label_ids = label_idss[doc_id];
+            if parsed_corpus_labels == None:
+                label_ids = label_idss[doc_id];
             
             # initialize gamma for this document
             gamma_values[doc_id, :] = self._alpha_alpha + 1.0 * total_word_count / self._number_of_topics;
@@ -189,10 +191,12 @@ class VariationalBayes(Inferencer):
                             # log_phi = E_log_beta[:, term_ids].T + numpy.tile(scipy.special.psi(gamma_values[[doc_id], :]), (word_ids[doc_id].shape[0], 1));
                             log_phi_n = scipy.special.psi(gamma_values[doc_id, :]) + E_log_beta[:, term_id];
                             assert log_phi_n.shape == (self._number_of_topics,);
-                            
-                            log_phi_n += numpy.sum(self._eta[label_ids, :], axis=0) / total_word_count
-                            
-                            log_phi_n -= len(label_ids) * h_vector / numpy.dot(h_vector, phi_n)
+
+                            if parsed_corpus_labels == None:
+                                log_phi_n += numpy.sum(self._eta[label_ids, :], axis=0) / total_word_count
+                                log_phi_n -= len(label_ids) * h_vector / numpy.dot(h_vector, phi_n)
+                            else:
+                                log_phi_n -= h_vector / numpy.dot(h_vector, phi_n)
                             assert log_phi_n.shape == (self._number_of_topics,);
                             
                             log_phi_n -= scipy.misc.logsumexp(log_phi_n);
@@ -233,7 +237,8 @@ class VariationalBayes(Inferencer):
             # compute the phi terms
             document_log_likelihood -= numpy.sum(phi * log_phi);
             # compute the eta terms
-            document_log_likelihood += numpy.dot(numpy.sum(self._eta[label_ids, :], axis=0), phi_mean);
+            if parsed_corpus_labels == None:
+                document_log_likelihood += numpy.dot(numpy.sum(self._eta[label_ids, :], axis=0), phi_mean);
             document_log_likelihood -= numpy.log(numpy.sum(auxilary_variables_per_label))
             
             # Note: all terms including E_q[p(\_eta | \_beta)], i.e., terms involving \Psi(\_eta), are cancelled due to \_eta updates in M-step
@@ -422,10 +427,13 @@ class VariationalBayes(Inferencer):
         
         clock_e_step = time.time();
         words_log_likelihood, corpus_gamma_values, predicted_responses = self.e_step(parsed_corpus);
-        mean_absolute_error = numpy.abs(predicted_responses - parsed_labels[:, numpy.newaxis]).sum()
+        assert predicted_responses.shape==(len(parsed_corpus), self._number_of_labels);
         clock_e_step = time.time() - clock_e_step;
-        
-        return words_log_likelihood, corpus_gamma_values
+
+        if len(parsed_labels) == 0:
+            return words_log_likelihood, corpus_gamma_values, predicted_responses
+        elif len(parsed_labels) == len(parsed_corpus):
+            return words_log_likelihood, corpus_gamma_values, predicted_responses, parsed_labels
     
     """
     @param alpha_vector: a dict data type represents dirichlet prior, indexed by topic_id

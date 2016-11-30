@@ -236,9 +236,11 @@ def main():
         if (slda_inferencer._counter % snapshot_interval == 0):
             # slda_inferencer.export_beta(output_directory + 'exp_beta-' + str(slda_inferencer._counter));
             slda_inferencer.export_eta(output_directory + 'exp_eta-' + str(slda_inferencer._counter));
+            model_snapshot_path = os.path.join(output_directory, 'model-' + str(slda_inferencer._counter));
+            cPickle.dump(slda_inferencer, open(model_snapshot_path, 'wb'));
     
-    model_snapshot_path = os.path.join(output_directory, 'model-' + str(slda_inferencer._counter));
-    cPickle.dump(slda_inferencer, open(model_snapshot_path, 'wb'));
+    #model_snapshot_path = os.path.join(output_directory, 'model-' + str(slda_inferencer._counter));
+    #cPickle.dump(slda_inferencer, open(model_snapshot_path, 'wb'));
     
 if __name__ == '__main__':
     main()

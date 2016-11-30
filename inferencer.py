@@ -35,7 +35,7 @@ class Inferencer():
     def __init__(self,
                  # local_parameter_iterations=50,
                  hyper_parameter_optimize_interval=10,
-                 padding_default_label=True,
+                 padding_default_label=False,
                  ):
         
         self._hyper_parameter_optimize_interval = hyper_parameter_optimize_interval;
