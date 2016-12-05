@@ -99,7 +99,7 @@ class Inferencer():
             for token in document.split():
                 if token not in self._type_to_index:
                     continue;
-                
+
                 type_id = self._type_to_index[token];
                 word_ids.append(type_id);
             
