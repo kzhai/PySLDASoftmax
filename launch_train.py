@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import cPickle, getopt, sys, time, re
+import cPickle, getopt, sys, time, re, random
 import datetime, os;
 
 import scipy.io;
@@ -227,7 +227,8 @@ def main():
     else:
         sys.stderr.write("error: unrecognized inference mode %d...\n" % (inference_mode));
         return;
-    
+
+    random.shuffle(train_docs);
     slda_inferencer._initialize(train_docs, vocab, labels, number_of_topics, alpha_alpha, alpha_beta, eta_l2_lambda);
     
     for iteration in xrange(training_iterations):

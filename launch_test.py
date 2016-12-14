@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import cPickle, getopt, sys, time, re
+import cPickle, getopt, sys, time, re, random
 import datetime, os;
 
 import scipy.io;
@@ -65,7 +65,9 @@ def main():
     for line in input_doc_stream:
         test_docs.append(line.strip().lower());
     print "successfully load all testing docs from %s..." % (os.path.abspath(test_docs_path));
-    
+
+    random.shuffle(test_docs);
+
     if snapshot_index>=0:
         input_snapshot_path = os.path.join(model_directory, ("model-%d" % (snapshot_index)))
         if not os.path.exists(input_snapshot_path):
